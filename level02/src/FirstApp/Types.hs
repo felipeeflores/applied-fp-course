@@ -30,6 +30,9 @@ import           Data.Text       (Text)
 -- ViewRq : Which needs the topic being requested.
 -- ListRq : Which doesn't need anything and lists all of the current topics.
 data RqType
+  = AddRq Topic CommentText
+  | ViewRq Topic
+  | ListRq
 
 -- Not everything goes according to plan, but it's important that our types
 -- reflect when errors can be introduced into our program. Additionally it's
@@ -37,10 +40,12 @@ data RqType
 
 -- Fill in the error constructors as you need them.
 data Error
+  = TopicNotFound | InvalidTopic | InvalidCommentText | NotFound
 
 -- Provide the constructors for a sum type to specify the `ContentType` Header,
 -- to be used when we build our Response type.
 data ContentType
+  = PlainText | JSON
 
 -- The ``ContentType`` constructors don't match what is required for the header
 -- information, so write a function that will take our ``ContentType`` and
@@ -48,8 +53,9 @@ data ContentType
 renderContentType
   :: ContentType
   -> ByteString
-renderContentType =
-  error "renderContentType not implemented"
+renderContentType PlainText = "text/plain"
+renderContentType JSON = "application/json"
+
 
 -- In Haskell the ``newtype`` is a wrapper of sorts that comes with zero runtime
 -- cost. It is purely used for type-checking. So when you have a bare primitive
@@ -82,23 +88,22 @@ newtype CommentText = CommentText Text
 mkTopic
   :: Text
   -> Either Error Topic
-mkTopic =
-  error "mkTopic not implemented"
+mkTopic "" = Left InvalidTopic
+mkTopic topic = Right $ Topic topic
+
 
 getTopic
   :: Topic
   -> Text
-getTopic =
-  error "getTopic not implemented"
+getTopic (Topic text) = text
 
 mkCommentText
   :: Text
   -> Either Error CommentText
-mkCommentText =
-  error "mkCommentText not implemented"
+mkCommentText "" = Left InvalidCommentText
+mkCommentText text = Right $ CommentText text
 
 getCommentText
   :: CommentText
   -> Text
-getCommentText =
-  error "getCommentText not implemented"
+getCommentText (CommentText comment) = comment
