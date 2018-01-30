@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE ViewPatterns #-}
 module FirstApp.Types
   ( Error (..)
   , RqType (..)
@@ -30,7 +31,7 @@ import qualified Data.Aeson.Types  as A
 
 import           Data.Time         (UTCTime)
 
-import           FirstApp.DB.Types (DBComment)
+import           FirstApp.DB.Types (DBComment(..))
 
 newtype Topic = Topic Text
   deriving (Show, ToJSON)
@@ -69,8 +70,8 @@ data Comment = Comment
 modFieldLabel
   :: String
   -> String
-modFieldLabel =
-  error "modFieldLabel not implemented"
+modFieldLabel (stripPrefix "comment" -> Just label) = label
+modFieldLabel label = label
 
 instance ToJSON Comment where
   -- This is one place where we can take advantage of our `Generic` instance.
@@ -92,11 +93,30 @@ instance ToJSON Comment where
 -- that we would be okay with showing someone. However unlikely it may be, this
 -- is a nice method for separating out the back and front end of a web app and
 -- providing greater guarantees about data cleanliness.
+
+-- data DBComment = DBComment {
+--   commentId :: Int,
+--   commentTopic :: Text,
+--   commentText :: Text,
+--   commentTime  :: UTCTime
+-- } deriving Show
+-- Comment = Comment
+--   { commentId    :: CommentId
+--   , commentTopic :: Topic
+--   , commentBody  :: CommentText
+--   , commentTime  :: UTCTime
+--   }
+
+
 fromDbComment
   :: DBComment
   -> Either Error Comment
-fromDbComment =
-  error "fromDbComment not yet implemented"
+fromDbComment dbComment =
+  Comment (CommentId     $ dbCommentId dbComment)
+      <$> (mkTopic       $ dbCommentTopic dbComment)
+      <*> (mkCommentText $ dbCommentText dbComment)
+      <*> (pure          $ dbCommentTime dbComment)
+
 
 nonEmptyText
   :: (Text -> a)
@@ -139,7 +159,7 @@ data Error
   = UnknownRoute
   | EmptyCommentText
   | EmptyTopic
-  -- We need another constructor for our DB error types.
+  | DBError
   deriving Show
 
 data ContentType

@@ -22,7 +22,9 @@ import qualified Database.SQLite.SimpleErrors       as Sql
 import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 
 import           FirstApp.Types                     (Comment, CommentText,
-                                                     Error, Topic)
+                                                     Error(DBError), Topic, fromDbComment,
+                                                     getTopic, getCommentText, mkTopic)
+import           FirstApp.DB.Types                  (DBComment)
 
 -- ------------------------------------------------------------------------|
 -- You'll need the documentation for sqlite-simple ready for this section! |
@@ -32,14 +34,13 @@ import           FirstApp.Types                     (Comment, CommentText,
 -- our database queries. This also allows things to change over time without
 -- having to rewrite all of the functions that need to interact with DB related
 -- things in different ways.
-data FirstAppDB = FirstAppDB
+data FirstAppDB = FirstAppDB {conn :: Connection}
 
 -- Quick helper to pull the connection and close it down.
 closeDB
   :: FirstAppDB
   -> IO ()
-closeDB =
-  error "closeDb not implemented"
+closeDB (FirstAppDB conn) = Sql.close conn
 
 -- Given a `FilePath` to our SQLite DB file, initialise the database and ensure
 -- our Table is there by running a query to create it, if it doesn't exist
@@ -47,8 +48,10 @@ closeDB =
 initDB
   :: FilePath
   -> IO ( Either SQLiteResponse FirstAppDB )
-initDB fp =
-  error "initDb not implemented"
+initDB fp = Sql.runDBAction $ do
+  connection <- Sql.open fp
+  _ <- Sql.execute_ connection createTableQ
+  pure $ FirstAppDB connection
   where
   -- Query has an `IsString` instance so string literals like this can be
   -- converted into a `Query` type when the `OverloadedStrings` language
@@ -69,43 +72,43 @@ getComments
   :: FirstAppDB
   -> Topic
   -> IO (Either Error [Comment])
-getComments =
-  let
-    sql = "SELECT id,topic,comment,time FROM comments WHERE topic = ?"
-  -- There are several possible implementations of this function. Paritcularly
-  -- there may be a trade-off between deciding to throw an Error if a DbComment
-  -- cannot be converted to a Comment, or simply ignoring any DbComment that is
-  -- not valid.
-  in
-    error "getComments not implemented"
+getComments db topic = do
+    let sql = "SELECT id,topic,comment,time FROM comments WHERE topic = ?"
+
+    runAction ( traverse fromDbComment ) $ Sql.query (conn db) sql [ getTopic topic ]
 
 addCommentToTopic
   :: FirstAppDB
   -> Topic
   -> CommentText
   -> IO (Either Error ())
-addCommentToTopic =
-  let
-    sql = "INSERT INTO comments (topic,comment,time) VALUES (?,?,?)"
-  in
-    error "addCommentToTopic not implemented"
-
+addCommentToTopic db topic comment = do
+  currentTime <- getCurrentTime
+  let sql = "INSERT INTO comments (topic,comment,time) VALUES (?,?,?)"
+  runAction Right $ Sql.execute (conn db) sql (getTopic topic, getCommentText comment, currentTime)
 
 getTopics
   :: FirstAppDB
   -> IO (Either Error [Topic])
-getTopics =
-  let
-    sql = "SELECT DISTINCT topic FROM comments"
-  in
-    error "getTopics not implemented"
+getTopics db = do
+  let sql = "SELECT DISTINCT topic FROM comments"
+  runAction ( traverse (mkTopic . Sql.fromOnly) ) $ Sql.query_ (conn db) sql
 
 deleteTopic
   :: FirstAppDB
   -> Topic
   -> IO (Either Error ())
-deleteTopic =
+deleteTopic db topic =
   let
     sql = "DELETE FROM comments WHERE topic = ?"
   in
-    error "deleteTopic not implemented"
+    runAction Right $ Sql.execute (conn db) sql [getTopic topic]
+
+
+runAction
+  :: (a -> Either Error b)
+  -> IO a
+  -> IO (Either Error b)
+runAction f a = do
+  result <- Sql.runDBAction a
+  pure $ either (\_ -> Left $ DBError) f result
