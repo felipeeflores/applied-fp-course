@@ -23,6 +23,8 @@ import qualified Data.ByteString.Lazy.Char8         as LBS
 import           Data.Either                        (Either (Left, Right),
                                                      either)
 
+import           Data.Bifunctor                     (first)
+
 import           Data.Semigroup                     ((<>))
 import           Data.Text                          (Text)
 import           Data.Text.Encoding                 (decodeUtf8)
@@ -32,7 +34,7 @@ import qualified Data.Aeson                         as A
 
 import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 
-import           FirstApp.Conf                      (Conf, firstAppConfig)
+import           FirstApp.Conf                      (Conf(..), firstAppConfig)
 import qualified FirstApp.DB                        as DB
 import           FirstApp.Types                     (ContentType (JSON, PlainText),
                                                      Error (EmptyCommentText, EmptyTopic, UnknownRoute),
@@ -48,7 +50,13 @@ data StartUpError
   deriving Show
 
 runApp :: IO ()
-runApp = error "runApp needs re-implementing"
+runApp = do
+  -- Load our configuration
+  initConfig <- prepareAppReqs
+  -- Loading the configuration can fail, so we have to take that into account now.
+  case initConfig of
+    Left _   -> error ("failed to initialise app")
+    Right firstAppDb -> run 3000 (app firstAppDb)
 
 -- We need to complete the following steps to prepare our app requirements:
 --
@@ -60,8 +68,10 @@ runApp = error "runApp needs re-implementing"
 --
 prepareAppReqs
   :: IO ( Either StartUpError DB.FirstAppDB )
-prepareAppReqs =
-  error "prepareAppReqs not implemented"
+prepareAppReqs = do
+  config <- pure firstAppConfig
+  result <- DB.initDB (dbFilePath config)
+  return $ first (DbInitErr) result
 
 -- | Some helper functions to make our lives a little more DRY.
 mkResponse
@@ -129,12 +139,12 @@ handleRequest
   :: DB.FirstAppDB
   -> RqType
   -> IO (Either Error Response)
-handleRequest _db (AddRq _ _) =
-  (resp200 PlainText "Success" <$) <$> error "AddRq handler not implemented"
-handleRequest _db (ViewRq _)  =
-  error "ViewRq handler not implemented"
+handleRequest _db (AddRq topic comment) =
+  (resp200 PlainText "Success" <$) <$> DB.addCommentToTopic _db topic comment
+handleRequest _db (ViewRq topic)  =
+  fmap resp200Json <$> DB.getComments _db topic
 handleRequest _db ListRq      =
-  error "ListRq handler not implemented"
+  fmap resp200Json <$> DB.getTopics _db
 
 mkRequest
   :: Request

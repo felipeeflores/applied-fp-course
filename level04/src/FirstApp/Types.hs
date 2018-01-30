@@ -94,19 +94,6 @@ instance ToJSON Comment where
 -- is a nice method for separating out the back and front end of a web app and
 -- providing greater guarantees about data cleanliness.
 
--- data DBComment = DBComment {
---   commentId :: Int,
---   commentTopic :: Text,
---   commentText :: Text,
---   commentTime  :: UTCTime
--- } deriving Show
--- Comment = Comment
---   { commentId    :: CommentId
---   , commentTopic :: Topic
---   , commentBody  :: CommentText
---   , commentTime  :: UTCTime
---   }
-
 
 fromDbComment
   :: DBComment
