@@ -61,15 +61,14 @@ initDB fp = Sql.runDBAction $ do
 
 getDBConn
   :: AppM Connection
-getDBConn =
-  error "getDBConn not implemented"
+getDBConn = asks (dbConn . envDB)
 
 runDB
   :: (a -> Either Error b)
   -> (Connection -> IO a)
   -> AppM (Either Error b)
-runDB =
-  error "runDB not re-implemented"
+runDB aToErrorOrB connToIoOfA =  
+
 
 getComments
   :: Topic

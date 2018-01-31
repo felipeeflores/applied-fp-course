@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE InstanceSigs          #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE GeneralizeNewTypeDeriving #-}
+
 module FirstApp.AppM where
 
 import           Control.Monad.IO.Class (MonadIO (..))
@@ -26,7 +28,30 @@ data Env = Env
 --
 -- We can create this by wrapping a function in a newtype like so:
 
-newtype AppM a = AppM ( Env -> IO a )
+newtype AppM a = AppM { run :: Env -> IO a }
+
+-- Using ReaderT
+newtype AppM' a = AppM'
+  { unAppM :: ReaderT Env IO a }
+  deriving ( Functor
+           , Applicative
+           , Monad
+           , MonadIO
+           , MonadReader Env)
+-- for level07
+-- Stack transformers!
+newtype AppM'' a = AppM''
+  { unAppM :: ReaderT Env (ExceptT Error IO) a }
+  deriving ( Functor
+           , Applicative
+           , Monad
+           , MonadIO
+           , MonadReader Env
+           , MonadError Error)
+
+-- If you needed to add StateT, that guy would replace IO with something like (State Foo IO)
+-- and derive from MonadState Foo, and so on. Caveat: Order of stacking matters.
+
 
 -- This gives us a type that declares this function has access to our Env, and
 -- will do something involving IO. It's another form of documentation and type
@@ -53,45 +78,52 @@ runAppM
   :: AppM a
   -> Env
   -> IO a
-runAppM =
-  error "runAppM not implemented"
+runAppM (AppM f) env = f env
 
 instance Functor AppM where
   fmap :: (a -> b) -> AppM a -> AppM b
-  fmap = error "fmap for AppM not implemented"
+  fmap f (AppM m) = AppM(fmap f . m)
+  -- alternatively
+  --fmap f mofA = AppM (\env -> f <$> runAppM mofA env)
+  --fmap f (AppM m) = AppM(\env -> f <$> m env)
 
 instance Applicative AppM where
   pure :: a -> AppM a
-  pure = error "pure for AppM not implemented"
+  pure a = AppM (\_ -> pure a)
 
   (<*>) :: AppM (a -> b) -> AppM a -> AppM b
-  (<*>) = error "spaceship for AppM not implemented"
+  (<*>) mOfAtoB mOfA =
+    AppM(\env -> runAppM mOfAtoB env <*> runAppM mOfA env)
 
 instance Monad AppM where
   return :: a -> AppM a
-  return = error "return for AppM not implemented"
+  return a = AppM (\_ -> return a)
 
   -- When it comes to running functions in AppM as a Monad, this will take care
   -- of passing the Env from one function to the next.
   (>>=) :: AppM a -> (a -> AppM b) -> AppM b
-  (>>=) = error "bind for AppM not implemented"
+  (>>=) mOfA aToMOfB = AppM (\env ->  do
+                                a <- runAppM mOfA env
+                                b <- runAppM (aToMOfB a) env
+                                return $ b
+                                )
 
 instance MonadReader Env AppM where
   -- Return the current Env from the AppM.
   ask :: AppM Env
-  ask = error "ask for AppM not implemented"
+  ask = AppM(\env -> pure env)
 
   -- Run a AppM inside of the current one using a modified Env value.
   local :: (Env -> Env) -> AppM a -> AppM a
-  local = error "local for AppM not implemented"
+  local modifyEnv mOfA = AppM(\env -> runAppM mOfA (modifyEnv env))
 
   -- This will run a function on the current Env and return the result.
   reader :: (Env -> a) -> AppM a
-  reader = error "reader for AppM not implemented"
+  reader f = AppM(\env -> pure (f env))
 
 instance MonadIO AppM where
   -- Take a type of 'IO a' and lift it into our AppM.
   liftIO :: IO a -> AppM a
-  liftIO = error "liftIO for AppM not implemented"
+  liftIO io = AppM(\_ -> io)
 
 -- Move on to ``src/FirstApp/DB.hs`` after this
